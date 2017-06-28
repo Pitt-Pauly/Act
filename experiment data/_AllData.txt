@@ -1,0 +1,9 @@
+1,House-Intro.swf,Rephrase,House-Stay.swf,HStay-PlayWBoth.swf,PwB-FightGreen.swf,House-Intro.swf,House-Play.swf,HPlay-StayWYellow.swf,SwY-Fight.swf,House-Intro.swf,House-Stay.swf,HStay-YellowVSGreen.swf,YvsG-HuntGreen.swf;
+
+2,House-Intro.swf,Replay,House-Stay.swf,HStay-YellowVSGreen.swf,YvsG-HuntGreen.swf,Replay,House-Intro.swf,House-Play.swf,HPlay-TalkToGreen.swf,Replay,TtG-ChaseYellow.swf,Replay,Replay,House-Intro.swf,House-Stay.swf,HStay-YellowVSGreen.swf,YvsG-Escape.swf,Replay;
+
+3,House-Intro.swf,House-Stay.swf,HStay-YellowVSGreen.swf,YvsG-Escape.swf,House-Intro.swf,House-Play.swf,HPlay-TalkToGreen.swf,TtG-ChaseYellow.swf,House-Intro.swf,House-Stay.swf,HStay-PlayWBoth.swf,PwB-FightGreen.swf,House-Intro.swf,House-Play.swf,HPlay-TalkToGreen.swf,TtG-ChaseGreen.swf,Replay;
+
+4,House-Intro.swf,House-Play.swf,HPlay-TalkToGreen.swf,TtG-ChaseYellow.swf,Replay,House-Intro.swf,House-Stay.swf,HStay-YellowVSGreen.swf,Replay,YvsG-Escape.swf,Replay;
+
+5,House-Intro.swf,Rephrase,House-Play.swf,HPlay-TalkToGreen.swf,Rephrase,TtG-ChaseGreen.swf;

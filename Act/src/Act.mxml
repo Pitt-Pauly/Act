@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application name="Act"
+			   xmlns:fx="http://ns.adobe.com/mxml/2009"
+			   xmlns:s="library://ns.adobe.com/flex/spark"
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   xmlns:ns1="*"
+			   minWidth="955" minHeight="600" 
+			   backgroundColor="#000000"
+			   creationComplete="initApp();" 
+			   currentState="SaveState">
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		
+		s|Button#decBtn {
+			skinClass: ClassReference("skins.ImageButtonSkin");
+		}
+	</fx:Style>
+	<fx:Script>
+		<![CDATA[
+			import flash.external.ExternalInterface;
+						
+			// Array of external clips to use. Variable index refers to next clip to be displayed.
+			private static var PATH:String = "../assets/animations/compiled-v2/";
+			// String holding the decision log data
+			[Bindable] private var log:String = "";
+			// fileReference used to save log to file.
+			private var fileRef:FileReference = new FileReference();
+			// tree structure in array, breath first ordering.
+			private var clips:Array = ["House-Intro.swf","House-Stay.swf","House-Play.swf","HStay-PlayWBoth.swf","HStay-YellowVSGreen.swf","HPlay-StayWYellow.swf","HPlay-TalkToGreen.swf","PwB-FightGreen.swf","PwB-Escape.swf","YvsG-HuntGreen.swf","YvsG-Escape.swf","SwY-Fight.swf","SwY-Escape.swf","TtG-ChaseGreen.swf","TtG-ChaseYellow.swf"];
+			private static var introClip:String = PATH + "Act-TitleScreen.swf";
+			
+			// helper variables to keep track of the current depth level in the tree
+			private var currentLevel:int = -1;
+			private var currentClip:int = -1;
+			
+			// var determining how many times a clip is played before progressing to the description state 
+			private static var DEFAULT_PLAYS:int = 1;
+			private var plays:int = DEFAULT_PLAYS;
+			private var playCount:int = 0;
+						
+			// - level 0 - //
+			private static var HOUSE_INTRO:int = 0;
+			// - level 1 - //
+			private static var HOUSE_STAY:int = 1;
+			private static var HOUSE_PLAY:int = 2;
+			// - level 2 - //
+			private static var HS_PWB:int = 3;
+			private static var HS_YVSG:int = 4;
+			private static var HP_SWY:int = 5;
+			private static var HP_TTG:int = 6;	
+			// - level 3, ending clips - //
+			private static var PWB_FIGHTGREEN:int = 7;
+			private static var PWB_ESCAPE:int = 8;
+			private static var YVSG_HUNTGREEN:int = 9;
+			private static var YVSG_ESCAPE:int = 10;
+			private static var SWY_FIGHT:int = 11;
+			private static var SWY_ESCAPE:int = 12;
+			private static var TTG_CHASEBLUE:int = 13;
+			private static var TTG_CHASEYELLOW:int = 14;
+			
+			[Embed(source="../assets/graphics/blue-v2.png")]
+			public var ICON_BLUE:Class;
+			[Embed(source="../assets/graphics/yellow-v2.png")]
+			public var ICON_YELLOW:Class;
+			[Embed(source="../assets/graphics/green-v2.png")]
+			public var ICON_GREEN:Class;
+			
+			private var LABELS:Array = [["Hide","Play",ICON_BLUE,ICON_YELLOW], // decision 1
+				["Play","Watch\nthem",ICON_BLUE,ICON_GREEN], //"Yellow\nand\nGreen\nSquares"], // decision 2 - Stay
+				["Protect\nYellow","Talk to\nGreen",ICON_YELLOW,ICON_GREEN], // decision 2 - Play
+				["Fight","Escape",ICON_GREEN,ICON_YELLOW], // decision 3 - Stay, Play
+				["Attack","Defend",ICON_GREEN,ICON_YELLOW], // decision 3 - Stay, Watch
+				["Fight\nGreen","Escape\nwith\nYellow",ICON_GREEN,ICON_YELLOW], // decision 3 - Play, Stay
+				["Catch\nGreen","Catch\nYellow",ICON_GREEN,ICON_YELLOW]]; // decision 3 - Play, Talk
+			[Bindable] private var btnLeftlbl:String = "not set";
+			[Bindable] private var btnRightlbl:String = "not set";
+			[Bindable] private var pDecisionText:String = "What should Blue do?";
+			[Bindable] private var pDecisionText_alt:String = "Pick one:";
+						
+			private var thisMC:MovieClip = new MovieClip();
+			private var mcLoaded:Boolean = false;
+					
+			private function initApp():void{
+				ExternalInterface.addCallback("rightClick", onRightClick);
+				contextMenu.hideBuiltInItems();
+			}
+			
+			private function onRightClick():void{
+				// do nothing.
+			}
+			
+			private function intro_onClick(e:Event):void {
+				slLoader.unloadAndStop(false);
+				mcLoaded = false;
+				currentState = "PlayState";
+				currentClip = HOUSE_INTRO;
+				currentLevel = 0;
+				log = log.concat("," + clips[currentClip]);
+				slLoader.load(PATH + clips[currentClip]);
+			}
+			
+			private function descr_onClick(e:Event):void{
+				var source:Button = Button(e.target);
+				if (source.id == "btnReplay"){
+					log = log.concat(",Replay");
+					currentState = "PlayState";
+					plays = 1;
+					slLoader.load(PATH + clips[currentClip]);
+				}
+				//TODO: nice to have, change btnContinue label to 'Finish' when an ending clip was played.
+				if (source.id == "btnContinue"){
+					// in case the playedClip is an ending clip, then end the experiment.
+					if (currentClip >= PWB_FIGHTGREEN){
+						currentState = "PreEndState";
+					}else{
+						initButtons();
+						currentState = "DecisionState";
+					}
+				}
+			}
+			
+			private function decision_onClick(e:Event):void	{
+				var source:Button = Button(e.target);
+				
+				if (source.id == "btnRephrase") {
+					// show alternative texts. no anthropomorphism. 
+					log = log.concat(",Rephrase");
+					currentState = "AltDecisionState";
+					initAltButtons();
+				}else{			
+					if (currentLevel == -1) { 
+						trace("error in decision_onClick; currentLevel not set.");
+					}else{
+						// progress to next level within the story tree structure according to decision
+						// number of previous elements, relative to the current level
+						var prevCount:int = Math.pow(2,currentLevel)-1;
+						// local index of the currentClip on the currentLevel 
+						var lvlIndex:int = currentClip - prevCount;
+						// number of branches per node per level
+						var nBranches:int = 2;
+						// number of previous elements relative to the next level
+						prevCount = Math.pow(2,currentLevel+1)-1;
+						// base index of the next clip to be played 
+						var nextClip:int = prevCount + lvlIndex * nBranches ;
+						
+						// otherwise slLoader fails
+						currentState = "PlayState"; 
+						
+						// local_node_index + 0 for left choice, 
+						// local_node_index + 1 for right choice
+						if ((source.id == "btnLeft")||(source.id == "btnLeftAlt")) {
+							try{
+								slLoader.load(PATH + clips[nextClip]);
+							}catch(e:InvalidSWFError){
+								errorString = "Invalid path to SWF file."; 
+							}
+						}
+						if ((source.id == "btnRight")||(source.id == "btnRightAlt")) {
+							nextClip += 1;
+							try{
+								slLoader.load(PATH + clips[nextClip]);
+							}catch(e:InvalidSWFError){
+								errorString = "Invalid path to SWF file."; 
+							}
+						} 
+						currentClip = nextClip;
+						log = log.concat("," + clips[currentClip]);
+						// progress in the tree, depth + 1
+						currentLevel += 1;
+					}
+				}	
+			}
+			
+			private function saveState_onClick(e:Event):void{
+				var source:Button = Button(e.target);
+				
+				if (source.id == "btnStart"){
+					currentState='IntroState';
+					slLoader.load(introClip);
+				}
+				if (source.id =="btnSave"){
+					save();
+				}
+			}
+			
+			private function preEnd_onClick(e:Event):void{
+				var source:Button = Button(e.target);
+				
+				if (source.id == "btnPlayAgain"){
+					currentState='IntroState';
+					slLoader.load(introClip);
+				}
+				if (source.id =="btnBreak"){
+					currentState='EndState';
+					save();
+				}
+			}
+			
+			private function doneLoading(e:Event):void {
+				if ((currentState == "PlayState")||(currentState == "IntroState")){
+					mcLoaded = true;
+					thisMC = MovieClip(slLoader.content);
+					thisMC.addEventListener(Event.ENTER_FRAME, runOnce);
+					thisMC.gotoAndPlay(0);
+					if (currentState != "IntroState"){
+						Mouse.hide();
+					}
+				}
+			}
+			
+			private function runOnce(e:Event):void {
+				if (mcLoaded == true) {
+					// frames numbering starts at 0
+					if (thisMC.currentFrame >= thisMC.totalFrames -1) {
+						// if introClip is being played. stop and wait for user input
+						if (currentState == "IntroState"){
+							thisMC.stop();
+							//slLoader.unloadAndStop(false);
+							//mcLoaded = false;
+						}else{
+							playCount += 1;
+							if (playCount >= plays){
+								thisMC.stop();
+								slLoader.unloadAndStop(false);
+								mcLoaded = false;
+								playCount = 0;
+								plays = DEFAULT_PLAYS;
+								currentState = "DescriptionState";
+								Mouse.show();
+							}else{
+								thisMC.gotoAndPlay(0);
+							}
+						}
+					} 
+				}
+			}
+			
+			// customise button labels depending on the clip which was played.
+			private function initButtons():void{
+				trace("initialising buttons.\n");
+				var x:int = 0;
+				switch (currentClip){
+					case (HOUSE_INTRO):{ x = 0; break;}
+					case (HOUSE_STAY):{ x = 1; break;}
+					case (HOUSE_PLAY):{ x = 2; break;}
+					case (HS_PWB):{ x = 3; break;}
+					case (HS_YVSG):{ x = 4; break;}
+					case (HP_SWY):{ x = 5; break;}
+					case (HP_TTG):{ x = 6; break;}
+					default: { x = 0; break; }
+				}
+				btnLeftlbl = LABELS[x][0];
+				btnRightlbl = LABELS[x][1];
+				//btnLefticon_alt = LABELS[x][2];
+				//btnRighticon_alt = LABELS[x][3];
+			}
+			
+			// needs to be called after transition to AltDecisionState, otherwise the buttons will be null.
+			private function initAltButtons():void{
+				trace("initialising buttons.\n");
+				var x:int = 0;
+				switch (currentClip){
+					case (HOUSE_INTRO):{ x = 0; break;}
+					case (HOUSE_STAY):{ x = 1; break;}
+					case (HOUSE_PLAY):{ x = 2; break;}
+					case (HS_PWB):{ x = 3; break;}
+					case (HS_YVSG):{ x = 4; break;}
+					case (HP_SWY):{ x = 5; break;}
+					case (HP_TTG):{ x = 6; break;}
+					default: { x = 0; break; }
+				}
+				btnLeftAlt.setStyle("icon",LABELS[x][2]);
+				btnRightAlt.setStyle("icon",LABELS[x][3]);
+			}
+			
+			private function save():void {
+				fileRef.save(edtID.text+log+";", edtID.text + "-DLog.txt");
+			}			
+		]]>
+	</fx:Script>
+	
+	<s:states>
+		<s:State name="IntroState"/>
+		<s:State name="PlayState"/>
+		<s:State name="SaveState"/>
+		<s:State name="DescriptionState"/>
+		<s:State name="DecisionState"/>
+		<s:State name="EndState"/>
+		<s:State name="AltDecisionState"/>
+		<s:State name="PreEndState"/>
+	</s:states>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:SWFLoader id="slLoader" includeIn="PlayState,IntroState" autoLoad="false"
+				 complete="doneLoading(event)" enterFrame="runOnce(event)"
+				 maintainAspectRatio="true" maintainProjectionCenter="true" scaleContent="true"
+				 width.IntroState="100%" height.IntroState="100%"
+				 click.IntroState="intro_onClick(event);" 
+				 width.PlayState="75%" height.PlayState="75%"
+				 verticalCenter="0" horizontalCenter="0"
+				 verticalAlign="middle" horizontalAlign="center"/>
+	<s:Button id="btnStart" includeIn="SaveState" width="175" height="170"
+			  label="Start{'\n'}Experiment" click="saveState_onClick(event)" fontSize="22"
+			  horizontalCenter="278" skinClass="skins.ImageButtonSkin" verticalCenter="6"/>
+	<s:TextInput id="edtID" includeIn="SaveState" width="158" enabled="true" horizontalCenter="75"
+				 text="0" verticalCenter="-100"/>
+	<s:TextArea id="txtLog" includeIn="SaveState" height="150" editable="false" enabled="false"
+				horizontalCenter="75" text="{edtID.text+log+';'}" verticalCenter="0"/>
+	<s:Label id="lblID" includeIn="SaveState" color="#FFFFFF" fontSize="12" horizontalCenter="-83"
+			 text="Participant ID number:" verticalCenter="-104"/>
+	<s:Label id="lblLog" includeIn="SaveState" color="#FFFFFF" fontSize="12" horizontalCenter="-54"
+			 text="Decision Log:" verticalCenter="-69"/>
+	<s:Button id="btnSave" includeIn="SaveState" width="157" height="33" label="Save Log"
+			  click="save()" fontSize="12" horizontalCenter="75" verticalCenter="100"/>
+	<s:Label id="lblDescribe" includeIn="DescriptionState,PreEndState" color="#FFFFFF"
+			 fontFamily="Verdana" fontSize="30" horizontalCenter="0"
+			 text="What happened in the animation?" verticalCenter="-100"
+			 text.DescriptionState="What happened in the film?"
+			 text.PreEndState="What do you want to do now?"/>
+	<s:Button id="btnContinue" includeIn="DescriptionState" width="175" height="170"
+			  label="Continue" click="descr_onClick(event);" horizontalCenter="170"
+			  skinClass="skins.ImageButtonSkin" verticalCenter="70"/>
+	<s:Button id="btnReplay" includeIn="DescriptionState" width="175" height="170"
+			  label="Replay{'\n'}film" click="descr_onClick(event);" horizontalCenter="-173"
+			  skinClass="skins.ImageButtonSkin" verticalCenter="70"/>
+	<s:Button id="btnPlayAgain" includeIn="PreEndState" width="175" height="170"
+			  label="Play{'\n'}again" click="preEnd_onClick(event);" horizontalCenter="-173"
+			  skinClass="skins.ImageButtonSkin" verticalCenter="70"/>
+	<s:Button id="btnBreak" includeIn="PreEndState" width="175" height="170"
+			  label="Have a{'\n'}break" click="preEnd_onClick(event);" horizontalCenter="170"
+			  skinClass="skins.ImageButtonSkin" verticalCenter="70"/>
+	<s:Button id="btnLeft" includeIn="DecisionState" width="175" height="170"
+			  click="decision_onClick(event)"
+			  label="{btnLeftlbl}" 
+			  horizontalCenter="-250" skinClass="skins.ImageButtonSkin" verticalCenter="70"/>
+	<s:Button id="btnRight" includeIn="DecisionState" width="175" height="170" 
+			  skinClass.DecisionState="skins.ImageButtonSkin"
+			  click="decision_onClick(event)"
+			  label="{btnRightlbl}"			  
+			  verticalCenter="70" horizontalCenter="0" />
+	<s:Button id="btnRephrase" includeIn="DecisionState" width="175" height="175"
+			  skinClass="skins.ImageButtonSkin"
+			  click="decision_onClick(event)" 
+			  label="I{'\n'}don't{'\n'}know" 
+			  horizontalCenter="250"  verticalCenter="70"/>
+	<s:Button id="btnLeftAlt" includeIn="AltDecisionState" width="175" height="170"
+			  click="decision_onClick(event)"
+			  skinClass="skins.CircleButtonSkin" verticalCenter="70"
+			  horizontalCenter.AltDecisionState="-125"/>
+	<s:Button id="btnRightAlt" includeIn="AltDecisionState" width="175" height="170"
+			  click="decision_onClick(event)"
+			  label.AltDecisionState="" horizontalCenter.AltDecisionState="125"
+			  skinClass.AltDecisionState="skins.CircleButtonSkin"
+			  verticalCenter.AltDecisionState="70"/>
+	<s:Label id="lblQuestion" includeIn="AltDecisionState,DecisionState" color="#FFFFFF"
+			 text="{pDecisionText}" 
+			 text.AltDecisionState="{pDecisionText_alt}"
+			 fontSize="22" textAlign="center" 
+			 horizontalCenter="0" verticalCenter="-100"/>
+	<s:Image id="imgThanks" includeIn="EndState" width="50%" height="50%" horizontalCenter="0"
+			 source="@Embed('../assets/graphics/thankyou/thanks_1024x719.png')" verticalCenter="0"/>
+</s:Application>
